@@ -1,89 +1,191 @@
 #!/usr/bin/Rscript
 
-reName <- function(nameNumber=6){
-  schema <- read.csv("schema.csv")
-  nameTargets <- names(schema)
-  xList <- list.files(path = "files/")
-  for (a in xList){
-    if (!grepl(".ijm", x = a)){
-      aList <- list.files(path = paste0("files/", a))
-      for (aL in aList){
-        if(a %in% unique(schema$notebook_id)){
-          hit <- subset(schema, notebook_id == a)[1,]
-        } else if (a %in% unique(schema$name_id)){
-          hit <- subset(schema, name_id == a)[1,]
-        }
-        yList <- list.files(path = paste0("files/", a,"/", aL), pattern = ".tif")
-        for (b in yList){
-          if(T %in% sapply(nameTargets, grepl, strsplit(b, ".tif")[[1]][1])){
-            b_sub <- nameTargets[sapply(nameTargets, grepl, strsplit(b, ".tif")[[1]][1])]
-            x <- unique(hit[b_sub][,1])
-            x <- paste0(x, ".tif")
-            if (a != x){
-              file.rename(paste0("files/", a,"/", aL, "/", b), paste0("files/", a, "/", aL, "/", x))
-            }
-          } else if(grepl("Overlay.tif", b)) {
-            file.rename(paste0("files/", a,"/", aL, "/", b), paste0("files/", a, "/", aL, "/" ,"overlay.tif"))
-          }
-        }
-        if("PNGS" %in% list.files(path = paste0("files/", a, "/", aL))){
-          yList <- list.files(path = paste0("files/", a,"/", aL, "/PNGS"), pattern = ".png")
-          for (b in yList){
-            if(T %in% sapply(nameTargets, grepl, strsplit(b, "png")[[1]][1])){
-              b_sub <- nameTargets[sapply(nameTargets, grepl, strsplit(b, ".tif")[[1]][1])]
-              x <- unique(hit[b_sub][,1])
-              x <- paste0(x, ".png")
-              if (a != x){
-                file.rename(paste0("files/", a,"/", aL, "/PNGS/", b), paste0("files/", a, "/", aL, "/PNGS/", x))
-              }
-            } else if(grepl("Overlay.png", b)) {
-              file.rename(paste0("files/", a,"/", aL, "/PNGS/", b), paste0("files/", a, "/", aL, "/PNGS/overlay.png"))
-            }
-          }
-        }
-      }
-    }
+.rename_project_dir <- function(project_dir) {
+  if (!is.character(project_dir) || length(project_dir) != 1L || !dir.exists(project_dir)) {
+    stop("project_dir must identify an existing directory.")
   }
+  normalizePath(project_dir, mustWork = TRUE)
 }
 
-# If you notice that the naming scheme isn't quite right, use this function to reset the original file architecture
-# Then fix the schema file, and re-run reName
-reset_names <- function(){
-  xList <- list.files(path = "files/")
-  setwd("files")
-  for (a in xList){
-    if (!grepl(".ijm", x = a) & !grepl(".csv", x = a)){
-      setwd(a)
-      aList <- list.files()
-      for (aL in aList){
-        if(!grepl(".ijm", x = aL) & !grepl(".csv", x = aL)){
-          setwd(aL)
-          check <- list.files()
-          if ("originals" %in% check){
-            doubleCheck <- list.files(path = "originals/")
-            if (length(doubleCheck) > 0){
-              tifList <- list.files(pattern = "tif")
-              for (tif in tifList){
-                file.remove(tif)
-              }
-              dirList <- list.files()
-              for (dir in dirList){
-                if (dir != "originals"){
-                  unlink(dir, recursive = T)
-                }
-              }
-              oriFiles <- list.files(path = "originals/")
-              for (ori in oriFiles){
-                file.copy(from = paste0("originals/", ori), to = paste0("./", ori))
-              }
-              unlink("originals", recursive = T)
+.rename_file <- function(from, to) {
+  if (identical(from, to)) {
+    return(FALSE)
+  }
+  if (file.exists(to)) {
+    stop("Refusing to overwrite existing file while renaming '", from, "' to '", to, "'.")
+  }
+  if (!file.rename(from, to)) {
+    stop("Could not rename '", from, "' to '", to, "'.")
+  }
+  TRUE
+}
+
+.rename_target <- function(stem, target_names) {
+  matches <- target_names[vapply(
+    target_names,
+    function(target_name) grepl(target_name, stem, fixed = TRUE),
+    logical(1)
+  )]
+  if (length(matches) == 0L) {
+    return(NULL)
+  }
+
+  # Prefer the most specific channel name, e.g. CH10 rather than CH1.
+  matches[which.max(nchar(matches))]
+}
+
+re_name <- function(name_number = 6, project_dir = ".") {
+  if (length(name_number) != 1L || !is.numeric(name_number) || is.na(name_number)) {
+    stop("name_number must be one numeric value.")
+  }
+
+  project_dir <- .rename_project_dir(project_dir)
+  schema_path <- file.path(project_dir, "schema.csv")
+  files_dir <- file.path(project_dir, "files")
+  if (!file.exists(schema_path)) {
+    stop("No schema.csv found in project_dir: ", project_dir)
+  }
+  if (!dir.exists(files_dir)) {
+    stop("No files directory found in project_dir: ", project_dir)
+  }
+
+  schema <- read.csv(schema_path)
+  if (!"notebook_id" %in% names(schema)) {
+    stop("schema.csv must contain a notebook_id column.")
+  }
+
+  last_target_column <- min(as.integer(name_number), ncol(schema))
+  if (last_target_column < 2L) {
+    stop("schema.csv must contain at least one target column after notebook_id.")
+  }
+  name_targets <- names(schema)[seq.int(2L, last_target_column)]
+  renamed <- character()
+  condition_names <- list.files(path = files_dir)
+  for (condition_name in condition_names) {
+    condition_dir <- file.path(files_dir, condition_name)
+    if (grepl(".ijm", x = condition_name) || !dir.exists(condition_dir)) {
+      next
+    }
+
+    if (condition_name %in% unique(schema$notebook_id)) {
+      hit <- schema[schema$notebook_id == condition_name, , drop = FALSE][1L, ]
+    } else if ("name_id" %in% names(schema) &&
+                 condition_name %in% unique(schema$name_id)) {
+      hit <- schema[schema$name_id == condition_name, , drop = FALSE][1L, ]
+    } else {
+      warning("No schema row found for directory: ", condition_name)
+      next
+    }
+
+    image_names <- list.files(path = condition_dir)
+    for (image_name in image_names) {
+      image_dir <- file.path(condition_dir, image_name)
+      if (!dir.exists(image_dir)) {
+        next
+      }
+
+      tif_names <- list.files(path = image_dir, pattern = "[.]tif$", ignore.case = TRUE)
+      for (file_name in tif_names) {
+        stem <- tools::file_path_sans_ext(file_name)
+        target_name <- .rename_target(stem, name_targets)
+        source_path <- file.path(image_dir, file_name)
+
+        if (grepl("Overlay[.]tif$", file_name, ignore.case = TRUE)) {
+          destination_path <- file.path(image_dir, "overlay.tif")
+          if (.rename_file(source_path, destination_path)) {
+            renamed <- c(renamed, destination_path)
+          }
+        } else if (!is.null(target_name)) {
+          new_name <- paste0(as.character(hit[[target_name]][1L]), ".tif")
+          destination_path <- file.path(image_dir, new_name)
+          if (.rename_file(source_path, destination_path)) {
+            renamed <- c(renamed, destination_path)
+          }
+        }
+      }
+
+      png_dir <- file.path(image_dir, "PNGS")
+      if (dir.exists(png_dir)) {
+        png_names <- list.files(path = png_dir, pattern = "[.]png$", ignore.case = TRUE)
+        for (file_name in png_names) {
+          stem <- tools::file_path_sans_ext(file_name)
+          target_name <- .rename_target(stem, name_targets)
+          source_path <- file.path(png_dir, file_name)
+
+          if (grepl("Overlay[.]png$", file_name, ignore.case = TRUE)) {
+            destination_path <- file.path(png_dir, "overlay.png")
+            if (.rename_file(source_path, destination_path)) {
+              renamed <- c(renamed, destination_path)
+            }
+          } else if (!is.null(target_name)) {
+            new_name <- paste0(as.character(hit[[target_name]][1L]), ".png")
+            destination_path <- file.path(png_dir, new_name)
+            if (.rename_file(source_path, destination_path)) {
+              renamed <- c(renamed, destination_path)
             }
           }
-          setwd("../")
         }
       }
     }
-    setwd("../")
   }
-  setwd("../")
+
+  invisible(renamed)
+}
+
+# Restore original TIFF files and remove generated output from each image directory.
+reset_names <- function(project_dir = ".") {
+  project_dir <- .rename_project_dir(project_dir)
+  files_dir <- file.path(project_dir, "files")
+  if (!dir.exists(files_dir)) {
+    stop("No files directory found in project_dir: ", project_dir)
+  }
+
+  reset_dirs <- character()
+  condition_names <- list.files(path = files_dir)
+  for (condition_name in condition_names) {
+    condition_dir <- file.path(files_dir, condition_name)
+    if (grepl(".ijm", x = condition_name) || grepl(".csv", x = condition_name) ||
+          !dir.exists(condition_dir)) {
+      next
+    }
+
+    image_names <- list.files(path = condition_dir)
+    for (image_name in image_names) {
+      image_dir <- file.path(condition_dir, image_name)
+      if (grepl(".ijm", x = image_name) || grepl(".csv", x = image_name) ||
+            !dir.exists(image_dir)) {
+        next
+      }
+
+      originals_dir <- file.path(image_dir, "originals")
+      if (!dir.exists(originals_dir)) {
+        next
+      }
+
+      original_names <- list.files(path = originals_dir)
+      if (length(original_names) == 0L) {
+        next
+      }
+
+      tif_names <- list.files(path = image_dir, pattern = "tif")
+      if (length(tif_names) > 0L) {
+        file.remove(file.path(image_dir, tif_names))
+      }
+
+      generated_names <- list.files(path = image_dir)
+      generated_names <- generated_names[generated_names != "originals"]
+      for (generatedName in generated_names) {
+        unlink(file.path(image_dir, generatedName), recursive = TRUE)
+      }
+
+      file.copy(
+        from = file.path(originals_dir, original_names),
+        to = image_dir
+      )
+      unlink(originals_dir, recursive = TRUE)
+      reset_dirs <- c(reset_dirs, image_dir)
+    }
+  }
+
+  invisible(reset_dirs)
 }

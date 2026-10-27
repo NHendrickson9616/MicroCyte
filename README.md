@@ -1,37 +1,200 @@
 # MicroCyte v1.0.0
 
-Welcome to the Microcytometry workflow developed by Jason Needham out of the University of Alabama at Birmingham (2020-23)
-![Image of MicroCyte Workflow](https://github.com/SThompsonLab/MicroCyte/blob/main/MicroCyte.png)
+MicroCyte is a guided microcytometry workflow developed by Jason Needham at the University of
+Alabama at Birmingham (2020–2023). It organizes microscopy images, prepares them for analysis,
+runs cell and region-of-interest measurements, and combines the results into analysis-ready data.
 
-You can begin by sourcing 'microcyte.R' from within the main microcyte folder, which will allow you to run all the steps without individually sourcing the various scripts below. Before this, however, be sure to read about how these scripts work below so that you are using them correctly.
+![MicroCyte workflow](https://github.com/SThompsonLab/MicroCyte/blob/main/MicroCyte.png)
 
-Steps to use this package:
-0) *Install dependencies* These can be done by running the "0_setup.R" script. Not all of these are required for general functionality so check with the other bin functions to see what you require.
+For a complete worked example, see
+`MicroCyte_Example_Walkthrough_for_Cell_Cycle.pdf` in the MicroCyte folder.
 
-1) *Fill out schema.csv* The schema file holds all the metadata for your collection of images that will allow you to annotate, collect, and parse your image data. Using tidy data principles, each row should be a unqiue collection of images from a single observation (condition, knockdown, infection, etc) and the combined metadata should be unique for each row. This is most easily done by adding a notebook identifier that is unique to that condition (ex, JNp1_1 and JNp1_2 could be two rows, with both conditions existing within the JNp1 experiment, and two samples 1 and 2). After this column, there are the default image names. Since MicroCyte uses ImageJ for ROI extraction, each fluorescent image can and should be taken independently (no merged images). By default, there are 4 image identifiers (CH1, CH2, CH3, and CH4) that correspond to 4 potential fluorescent images (for example, beta actin, LAMP1, DAPI, and a viral protein). Since batch images are often saved by some default numbering system, a later function will use these image indentifiers to rename the images based on a given target. If your images are already saved by a target name, then its not important what you add in these columns but its good practice to write them out anyway. Also, not each row needs to use the same image identifiers, which can be helpful when analyzing mutliple experiments together. While these two entries are all that is required to continue, notebook IDs are often difficult to recall when capturing images, so its best to add additional columns of metadata to the schema to attach to the final datasets. For example, I might have two rows (notebook_id: JNp1_1 and JNp1_2) with the same image identifiers (CH1: betaActin, CH2: lamp1, CH3: dna, and CH4: nucleocapsid) but condition 1 is 24 hour timepoint and condition 2 is a 48 hou timepoint. By default, the first function, dirGen, will make two directories based on the notebook_id numbers, but it can be difficult to remember what times 1 and 2 refer to, and this is much more difficult with more complicated experiments/imaging. So by adding a 'time' column and adding '24hpi' and '48hpi', this data can be used to make directories labeled after the 'time' variable instead. Additional metadata will get concatonated with an underscore to build more even more descriptive directory names. For example, if there was a third row (JNp1_3) that was also collected at 48hpi, but was a mock-infected sample, I would add a second metadata column - 'infection' - that would contain the values of 'infected', 'infected' and 'uninfected' for these hypothetical rows. Now the generated folders would be '24hpi_infected', '48hpi_infected' and '48hpi_uninfected' - which is *way* more easy to visually parse than the unique notebook_ids. After you have filled out all the schema data (remembering that each row should have a unique notebook_id and/or a unique set of added metadata columns), you can continue with the next step. Due to some bad coding, any stain marking the DNA (ex. DAPI), should be labeled as 'dna'.
+## What you need
 
-2) *Run 1_dirGen.R* This will automatically generate the appropriate working directories and subdirectories for you to add your images. First, if the basic directories 'files', 'data', and 'figures' aren't present in the main folder, they will be added. You are then prompted if you would like the directory names to be based off the 'name' or 'number'. The 'name' option looks for metadata (any columns after the image identifiers), concatonates it, and makes a subdirectory under the 'files' directory with that result. The 'number' option will simple make subdirectories under the 'files' directory named by the unique 'notebook_id'. You are also given the option to add another layer of subdirectories based on the number of images you would like to add per condition. If your microscope automatically ('auto' and is default) generates such directories, this isn't necessary, but if you're manually adding images or taking images one at a time, its a good idea to type 'single' at the prompt, followed by the number of image subdirectories you would like made under each condition subdirectory. Finally, if you are a fluorescent microscopy wunderkind or are in the future where >4 fluorescent targets are feasible, the last prompt will ask how mnay fluorescent images are expected in each image folder. Based on the schema, the default is '4' but, if you modify the schema to add additional fluorescent images, the naming concatonation will adjust itself based on the entered number. **Note**: I am uncertain if changing the number of images to be greater than 4 affect downstream metatdata annotation.
+MicroCyte currently requires three components:
 
-3) *Add images to the appropriate subdirectories.* They should be TIFs, and labeled either by their target, or using the default "1_CH#.tif" convention given by the Keyence microscope. If you have modified your schema file to use a different image indentifier system, then use that instead. Due to some bad coding, any stain marking the DNA (ex. DAPI), should be labeled as 'dna'.
+1. **R** — download it from [The Comprehensive R Archive Network](https://cran.r-project.org/).
+2. **RStudio Desktop** — optional, but recommended for an easier experience. Download it from
+   [Posit](https://posit.co/download/rstudio-desktop/).
+3. **Fiji/ImageJ** — required for detecting cells and measuring the microscopy images. Download it
+   from [fiji.sc](https://fiji.sc/).
 
-3b) *Run 2_purgo.R* This will generate TIFs/PNGs from the images and correct for spectral overlap, if necessary. Can be run in manual (corrects between two images given by in the arguments), auto (corrects between CH3 and CH4), and full (sequentially corrects between CH1 through CH4) modes. If there is no overlap correction requried, then enter 'none'. Purgo will still run to setup the filestructure correctly, but it will not perform any spectral adjustments.
+MicroCyte works with the same R files on Windows and macOS. Keep the entire downloaded MicroCyte
+folder together; do not move `microCyte.R`, `schema.csv`, or the `bin` folder away from one another.
 
-3c) *Run 3_reName.R* This takes the image numbering system and renames them to be human-readable targets as specificed in the schema file.
+## Download MicroCyte
 
-4) *Run 4_YggData_multi ImageJ macro* This extracts both nuclear-dependent data and nuclear-independent data from the images by iterating through every image file in the 'files' directory (so long as it uses the MicroCyte file structure). By editing the macro in imageJ, you can alter the default size and intensity thresholds for 'dna' as well as pick your own parameters for whatever fluorescent target you're using based on the the image name. Its highly recommended that you verify these thresholds are correct for a couple sample images prior to running.
+1. On the MicroCyte GitHub page, select **Code**, then **Download ZIP**.
+2. Extract the ZIP file to a location where you have permission to create and modify files.
+3. Open the extracted `MicroCyte` folder.
 
-5) *Run 5_imagen.R* This will combine the nuclear-dependent and nuclear-indendent data from each image into two datasets. One is a detailed list of each ROI in the Nucear-independent data, and the other is a detailed list of the Nuclear-dependent data with average data for the associated Nuclear-Indenpendent data. Nearest neighbor calculations are used to assign ROIs to specific nuclei.
+Do not run MicroCyte from inside the ZIP file.
 
-6) *Run 6_concato.R* This will combine the individual image data within each condition into a single nuclear-dependent datasetand a nuclear-independent dataset. By default, all images pertaining to a single condition will be have its various extraction lower-quartile normalized to minimize and inter-image variation, but this parameter can be made 'FALSE'.
+## Start MicroCyte
 
-7) *Run 7_unite.R* This combines the individual conditions into a single nuclear-dependent datasetand a nuclear-independent dataset stored within the 'data' directory. Files can be united respective to a certain variable (ex, infected vs uninfected) or completely.
+1. Open R or RStudio.
+2. Set the working directory to the extracted MicroCyte folder—the folder containing
+   `microCyte.R` and `schema.csv`.
+   - In RStudio, open `microCyte.R`, then select
+     **Session → Set Working Directory → To Source File Location**.
+3. Enter the following in the R console:
 
-8) *Analyze data using SirMixaplot.R functions in Rstudio -OR- any Flow Cytometry software that will take a csv input.*
-8a) SirMixaPlot - This is a series of automated R scripts to analyze and present data
-8b) cap_ifa - This is a series of scripts to automatically call virally-infected plaques
-8c) explore - This generates summary list from a dataset based on the schema file and user-selected categories
-8d) icellate - This generates cropped images of specific cells within the images. Those cells can be individual cell numbers, or a list of cells. Line analyses are also generated centered on the middle of the nucleus (default 2 along the x and y axes, but if >2 are requested then the lines are run radially through the center of the cell).
+```r
+source("microCyte.R")
+run_microcyte()
+```
 
-I hope this makes your life easier and generates lots of data!
+The MicroCyte menu will appear.
 
--Jason
+### Install the R dependencies
+
+The first time you run MicroCyte, choose menu option **0 — Setup**. MicroCyte will check for its
+required R packages and download any that are missing. An internet connection is required during
+this step. Package installation may take several minutes.
+
+After setup finishes, return to the menu and continue with the workflow. Setup normally only needs
+to be run again after reinstalling or updating R.
+
+## Typical workflow
+
+| Order | Menu option | Purpose |
+|---:|---|---|
+| 1 | **0 — Setup** | Install missing R packages. |
+| 2 | Edit `schema.csv` | Describe the samples, image channels, and experimental metadata. |
+| 3 | **1 — dir_gen** | Create the experiment and image directories. |
+| 4 | Add images | Place the microscopy images in the generated directories. |
+| 5 | **2 — purgo** | Prepare images and optionally correct spectral overlap. |
+| 6 | **3 — re_name** | Rename image channels using `schema.csv`. |
+| 7 | Fiji/ImageJ macro | Detect cells and export measurements. |
+| 8 | **4 — ima_gen** | Combine the ImageJ measurements for each image. |
+| 9 | **5 — concato** | Combine images belonging to the same condition. |
+| 10 | **6 — unite** | Combine conditions into final experiment datasets. |
+| 11 | **9 — analyze** | Load the included analysis functions. |
+
+Menu option **7 — full run** guides you through the complete sequence. The workflow pauses when you
+need to collect images or run the Fiji/ImageJ macro.
+
+## Prepare `schema.csv`
+
+The schema describes the experiment. Each row represents one unique sample or condition.
+
+### Required information
+
+- `notebook_id` must uniquely identify each row.
+- Channel columns such as `CH_1`, `CH_2`, and `CH_3` map the microscope's channel labels to the
+  biological target names.
+- A DNA or nuclear stain such as DAPI must use the target name `dna`. The ImageJ macro uses this
+  channel to identify nuclei.
+- Additional columns may contain metadata such as time point, infection status, treatment, or
+  biological replicate.
+
+Example:
+
+| notebook_id | CH_1 | CH_2 | CH_3 | CH_4 | time | infection |
+|---|---|---|---|---|---|---|
+| JNp1_1 | betaActin | lamp1 | dna | nucleocapsid | 24hpi | infected |
+| JNp1_2 | betaActin | lamp1 | dna | nucleocapsid | 48hpi | infected |
+| JNp1_3 | betaActin | lamp1 | dna | nucleocapsid | 48hpi | uninfected |
+
+When generating directories, MicroCyte can use either:
+
+- **number** — creates directories from `notebook_id`, such as `JNp1_1`; or
+- **name** — creates descriptive directories from the metadata, such as
+  `48hpi_uninfected`.
+
+Every row must have a unique `notebook_id` or a unique combination of metadata values.
+
+## Generate the image directories
+
+Choose menu option **1 — dir_gen**.
+
+MicroCyte creates the following directories if they do not already exist:
+
+- `files` — source images, intermediate files, and condition-level results;
+- `data` — final combined datasets; and
+- `figures` — generated plots and figures.
+
+You will be asked whether images are captured automatically or individually. Choose **single** to
+have MicroCyte create numbered image folders for you. Choose **auto** if the microscope already
+creates a separate folder for each field or image set.
+
+## Add the microscopy images
+
+Place each image set in its generated directory under `files`.
+
+- Use TIF images.
+- Save each fluorescent channel as a separate image rather than a merged image.
+- Images may use the microscope channel names, such as `1_CH_1.tif`, or their target names.
+- Keep all channels from one field of view in the same image directory.
+- Ensure the nuclear channel is mapped to `dna` in `schema.csv`.
+
+## Prepare and rename the images
+
+Choose menu option **2 — purgo** to convert the images and configure spectral-overlap correction.
+Available modes are:
+
+- **none** — prepare the file structure without spectral correction;
+- **auto** — use the default automatic correction;
+- **manual** — choose the overlapping channels; and
+- **full** — apply sequential correction across the configured channels.
+
+MicroCyte can generate quality-control plots showing relationships between channel intensities.
+After Purgo finishes, it offers to run the rename step automatically.
+
+Choose menu option **3 — re_name** separately if you need to rename the images again after editing
+`schema.csv`.
+
+## Run Fiji/ImageJ
+
+The Fiji macro is located at:
+
+`bin/scripts/scripts/4_YggData_multi.ijm`
+
+Open the macro in Fiji and run it after the images have been prepared and renamed. The macro:
+
+1. Uses the `dna` image to identify nuclei.
+2. Measures every fluorescent channel within the nuclear regions.
+3. Optionally measures non-nuclear and perinuclear regions.
+4. Saves CSV measurement files into each image directory.
+
+Test the detection settings on several representative images before processing the full experiment.
+The nuclear intensity threshold, size range, circularity, and target-specific settings are defined at
+the beginning of the macro.
+
+## Combine the results
+
+After the Fiji macro finishes, return to MicroCyte:
+
+1. Choose **4 — ima_gen** to associate measured regions with nuclei and create per-image datasets.
+2. Choose **5 — concato** to combine the images within each condition.
+3. Choose **6 — unite** to combine conditions into final experiment datasets.
+
+During Concato, MicroCyte can normalize measurements between image sets. During Unite, you can use
+all detected cells or draw the same number of cells from each condition. Conditions can be combined
+all together or grouped by a value from the schema.
+
+Final combined CSV files are written to the `data` directory.
+
+## Analysis tools
+
+Choose menu option **9 — analyze** to load the included analysis functions:
+
+- **SirMixaPlot** — automated data analysis and presentation tools;
+- **cap_ifa** — identifies and summarizes infected plaques;
+- **explore** — creates schema-based summaries of a dataset; and
+- **icellate** — crops selected cells and generates line-intensity analyses.
+
+The final CSV files can also be opened in spreadsheet software, R, or flow-cytometry software that
+supports CSV input.
+
+## If something goes wrong
+
+- Confirm that R's working directory is the main MicroCyte folder.
+- Confirm that `schema.csv`, `microCyte.R`, and the `bin` folder are still together.
+- Confirm that every `notebook_id` is unique.
+- Confirm that the nuclear target is named `dna`.
+- Confirm that each image set contains the expected TIF channel images.
+- Run menu option **0 — Setup** again if R reports that a package is missing.
+- Check the quality-control images before trusting the final measurements.
+
+MicroCyte is intended to make high-content microscopy analysis easier and more reproducible.
