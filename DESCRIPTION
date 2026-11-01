@@ -1,0 +1,36 @@
+Package: MicroCyte
+Type: Package
+Title: Guided Microcytometry Image Processing and Analysis
+Version: 1.0.0.9000
+Authors@R: c(
+    person("Jason Michael", "Needham", role = "aut", email = "jneedham@umd.edu"),
+    person("Nate", "Hendrickson", role = c("cre", "ctb"), email = "code@natehendrickson.com")
+    )
+Description: Provides a guided workflow for organizing microscopy images,
+    preparing image channels, combining Fiji/ImageJ measurements, and
+    analyzing microcytometry data. Analysis functions use explicit data and
+    path inputs and return their results without relying on ambient global
+    state.
+License: None
+Encoding: UTF-8
+LazyData: false
+Depends:
+    R (>= 4.1.0)
+Imports:
+    rlang
+Suggests:
+    ggplot2,
+    ggpubr,
+    ggtern,
+    hash,
+    imager,
+    magick,
+    MASS,
+    readr,
+    Rtsne,
+    stringr,
+    svglite,
+    tidyr,
+    tidyselect,
+    viridis
+SystemRequirements: ImageMagick++, FFTW3, libtiff, X11, zip

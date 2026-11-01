@@ -209,25 +209,24 @@ run_full_workflow <- function(stages, project_dir = ".", prompt = readline) {
 }
 
 load_analysis_scripts <- function(project_dir = ".", envir = parent.frame()) {
-  analysis_dir <- file.path(project_dir, "bin", "scripts", "analysis")
-  script_list <- list.files(analysis_dir, pattern = "[.]R$", full.names = TRUE)
-  if (length(script_list) == 0L) {
-    stop("No analysis scripts found in: ", analysis_dir)
+  if (!requireNamespace("MicroCyte", quietly = TRUE)) {
+    stop(
+      "Install the MicroCyte package before loading analysis tools. ",
+      "Run `R CMD INSTALL .` from: ", normalizePath(project_dir, mustWork = TRUE),
+      call. = FALSE
+    )
   }
 
-  print("Sourcing the analysis scripts...")
-  for (scriptPath in script_list) {
-    cat("Sourcing script: ", basename(scriptPath), "\n", sep = "")
-    sys.source(scriptPath, envir = envir)
+  exports <- getNamespaceExports("MicroCyte")
+  for (name in exports) {
+    assign(name, getExportedValue("MicroCyte", name), envir = envir)
   }
-  invisible(script_list)
+  message("Loaded ", length(exports), " MicroCyte analysis functions.")
+  invisible(exports)
 }
 
 run_microcyte <- function(project_dir = ".", prompt = NULL, analysis_env = parent.frame()) {
   project_dir <- normalizePath(project_dir, mustWork = TRUE)
-  default_warnings <- getOption("warn")
-  options(warn = -1)
-  on.exit(options(warn = default_warnings), add = TRUE)
 
   input_connection <- NULL
   if (is.null(prompt)) {

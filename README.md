@@ -37,14 +37,21 @@ Do not run MicroCyte from inside the ZIP file.
    `microCyte.R` and `schema.csv`.
    - In RStudio, open `microCyte.R`, then select
      **Session → Set Working Directory → To Source File Location**.
-3. Enter the following in the R console:
+3. Install the MicroCyte analysis package from the project directory:
+
+```r
+install.packages(".", repos = NULL, type = "source")
+```
+
+4. Start the workflow CLI:
 
 ```r
 source("microCyte.R")
 run_microcyte()
 ```
 
-The MicroCyte menu will appear.
+The MicroCyte menu will appear. Installing the package makes the analysis functions available to
+menu option **9 — analyze** and through `library(MicroCyte)`.
 
 ### Install the R dependencies
 
@@ -177,12 +184,37 @@ Final combined CSV files are written to the `data` directory.
 
 ## Analysis tools
 
-Choose menu option **9 — analyze** to load the included analysis functions:
+The analysis tools are provided by the `MicroCyte` R package. Load them directly with:
 
-- **SirMixaPlot** — automated data analysis and presentation tools;
-- **cap_ifa** — identifies and summarizes infected plaques;
-- **explore** — creates schema-based summaries of a dataset; and
-- **icellate** — crops selected cells and generates line-intensity analyses.
+```r
+library(MicroCyte)
+```
+
+Menu option **9 — analyze** loads the same exported functions into the interactive analysis
+environment for compatibility with the original workflow.
+
+Analysis functions now require their data and paths explicitly and return their results rather than
+creating or replacing objects in the global environment. For example:
+
+```r
+cells <- read.csv("data/experiment.csv")
+plaque_result <- foci_caller(cells)
+summary <- explore(cells, scheme = "schema.csv", save_file = FALSE)
+density_result <- color_density(cells, x = "dna_norm", y = "edu_norm")
+```
+
+The package includes:
+
+- **SirMixaPlot tools** — explicit data transformations and returned ggplot objects;
+- **CAP-IFA tools** — identify and summarize infected plaques;
+- **explore** and **plumeria** — create schema-based summaries and normalized metrics;
+- **icellate**, heat-map, and correlation tools — process images using explicit paths;
+- **ternaplot**, **ergodic_slicing**, and **smoke_stack** — return plots and transformed data; and
+- **pull_n_zip** — collect and archive raw images without changing the working directory.
+
+Specialized dependencies are optional and declared in `DESCRIPTION`. A function reports its missing
+package when that capability is called, so an unavailable image or ternary plotting dependency no
+longer prevents unrelated analysis tools from loading.
 
 The final CSV files can also be opened in spreadsheet software, R, or flow-cytometry software that
 supports CSV input.

@@ -1,0 +1,8 @@
+^\.git$
+^\.lintr$
+^\.Rbuildignore$
+^MicroCyte[.]Rcheck$
+^MicroCyte_.*[.]tar[.]gz$
+^[.]test-library$
+^bin$
+^microCyte[.]R$
